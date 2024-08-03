@@ -1,5 +1,5 @@
 'use client'
-import { Box, Container, Typography, Button, Modal, TextField, List, ListItem, ListItemText, IconButton, Paper, AppBar, Toolbar, InputAdornment, Menu, MenuItem, ThemeProvider, createTheme } from "@mui/material";
+import { Box, Container, Typography, Button, Modal, TextField, List, ListItem, ListItemText, IconButton, Paper, AppBar, Toolbar, InputAdornment, Menu, MenuItem, ThemeProvider, createTheme, CircularProgress } from "@mui/material";
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -7,12 +7,18 @@ import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import KitchenIcon from '@mui/icons-material/Kitchen';
-import CameraIcon from '@mui/icons-material/Camera';
-import { CameraAlt as CameraAltIcon, FlipCameraAndroid as FlipCameraIcon } from '@mui/icons-material';
+// import CameraIcon from '@mui/icons-material/Camera';
+import { 
+  CameraAlt as CameraIcon, 
+  FlipCameraAndroid as FlipCameraIcon,
+  Check as CheckIcon,
+  Replay as ReplayIcon
+} from '@mui/icons-material';
 import {firestore} from "@/firebase";
 import { collection, query, doc, getDocs, setDoc, deleteDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import React, { useEffect, useState, useRef } from "react";
 import { Camera } from "react-camera-pro";
+import OpenAI from 'openai';
 
 
 // Custom Theme (Pantry-like)
@@ -105,6 +111,117 @@ const imagePreviewStyle = {
   maxWidth: 600,
 };
 
+const openai = new OpenAI({
+  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true 
+})
+
+const analyzeImage = async (imageBase64) => {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "What item is in this image? Please respond with just the name of the item." },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64}`,
+              },
+            },
+          ],
+        },
+      ],
+      max_tokens: 300,
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error analyzing image:', error);
+    return null;
+  }
+};
+
+const CameraModal = ({ open, onClose, onCapture }) => {
+  const [image, setImage] = useState(null);
+  const [facingMode, setFacingMode] = useState('user');
+  const [loading, setLoading] = useState(false);
+  const cameraRef = useRef(null);
+
+  const takePhoto = () => {
+    const imageSrc = cameraRef.current.takePhoto();
+    setImage(imageSrc);
+  };
+
+  const retakePhoto = () => {
+    setImage(null);
+  };
+
+  const confirmPhoto = async () => {
+    setLoading(true);
+    await onCapture(image);
+    setLoading(false);
+    setImage(null);
+    onClose();
+  };
+
+  const switchCamera = () => {
+    setFacingMode(prevMode => prevMode === 'user' ? 'environment' : 'user');
+  };
+
+  return (
+    <Modal open={open} onClose={onClose}>
+      <Box sx={cameraModalStyle}>
+        {!image ? (
+          <Box sx={cameraBoxStyle}>
+            <Camera
+              ref={cameraRef}
+              facingMode={facingMode}
+              aspectRatio="cover"
+              style={{ width: '100%', height: '100%' }}
+            />
+            <IconButton sx={shutterButtonStyle} onClick={takePhoto}>
+              <CameraIcon fontSize="large" />
+            </IconButton>
+            <IconButton sx={flipButtonStyle} onClick={switchCamera}>
+              <FlipCameraIcon fontSize="large" />
+            </IconButton>
+          </Box>
+        ) : (
+          <Box sx={{ textAlign: 'center', position: 'relative' }}>
+            <img src={image} alt="Captured" style={imagePreviewStyle} />
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 2 }}>
+              <IconButton onClick={retakePhoto} color="secondary" sx={{ bgcolor: 'rgba(0, 0, 0, 0.5)' }}>
+                <ReplayIcon />
+              </IconButton>
+              <IconButton onClick={confirmPhoto} color="primary" sx={{ bgcolor: 'rgba(0, 0, 0, 0.5)' }}>
+                <CheckIcon />
+              </IconButton>
+            </Box>
+            {loading && (
+              <Box sx={{ 
+                position: 'absolute', 
+                top: 0, 
+                left: 0, 
+                right: 0, 
+                bottom: 0, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                bgcolor: 'rgba(0, 0, 0, 0.5)'
+              }}>
+                <CircularProgress color="primary" />
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
+    </Modal>
+  );
+};
+
 export default function Home() {
   const [pantry, setPantry] = useState([]);
   const [filteredPantry, setFilteredPantry] = useState([]);
@@ -115,9 +232,8 @@ export default function Home() {
   const [editItem, setEditItem] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [image, setImage] = useState(null);
-  const [facingMode, setFacingMode] = useState('user');
-  const cameraRef = useRef(null);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [pendingItem, setPendingItem] = useState('');
 
   const updatePantry = async () => {
     const snapshot = query(collection(firestore, 'pantry'));
@@ -220,27 +336,30 @@ export default function Home() {
     handleFilterClose();
   };
 
-  const openCamera = () => setCameraOpen(true);
-  const closeCamera = () => setCameraOpen(false);
-
-  const takePhoto = () => {
-    const imageSrc = cameraRef.current.takePhoto();
-    setImage(imageSrc);
+  const handleCapture = async (imageSrc) => {
+    const base64Image = imageSrc.split(',')[1];
+    const itemName = await analyzeImage(base64Image);
+    if (itemName) {
+      setPendingItem(itemName);
+      setConfirmationOpen(true);
+    } else {
+      console.log('Could not identify item in image');
+    }
   };
-
-  const retakePhoto = () => setImage(null);
-
-  const confirmPhoto = () => {
-    // Handle confirmed photo (e.g., upload, save, etc.)
-    console.log('Photo confirmed:', image);
-    closeCamera();
+  
+  const handleConfirmItem = async () => {
+    if (pendingItem.trim()) {
+      await addItem(pendingItem.trim());
+      console.log(`Added ${pendingItem} to pantry`);
+      setConfirmationOpen(false);
+      setPendingItem('');
+    }
   };
-
-  const switchCamera = () => {
-    const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
-    setFacingMode(newFacingMode);
+  
+  const handleCancelConfirmation = () => {
+    setConfirmationOpen(false);
+    setPendingItem('');
   };
-
 
   return (
     <ThemeProvider theme={theme}>
@@ -406,38 +525,45 @@ export default function Home() {
           </Box>
         </Modal>
         
-        <Modal open={cameraOpen} onClose={closeCamera}>
-        <Box sx={cameraModalStyle}>
-          {!image ? (
-            <Box sx={cameraBoxStyle}>
-              <Camera
-                ref={cameraRef}
-                facingMode={facingMode}
-                aspectRatio="cover"
-                style={{ width: '100%', height: '100%' }}
-              />
-              <IconButton sx={shutterButtonStyle} onClick={takePhoto}>
-                <CameraAltIcon fontSize="large" />
+        <CameraModal 
+          open={cameraOpen} 
+          onClose={() => setCameraOpen(false)} 
+          onCapture={handleCapture}
+        />
+        <Modal
+          open={confirmationOpen}
+          onClose={handleCancelConfirmation}
+          aria-labelledby="confirm-modal-title"
+          aria-describedby="confirm-modal-description"
+        >
+          <Box sx={{...modalStyle, bgcolor: 'background.paper'}}>
+            <Typography id="confirm-modal-title" variant="h6" component="h2" gutterBottom color="text.primary">
+              Confirm Item
+            </Typography>
+            <Typography id="confirm-modal-description" sx={{ mt: 2, mb: 2 }}>
+              Is this the correct item name? You can edit it if needed:
+            </Typography>
+            <TextField
+              autoFocus
+              fullWidth
+              value={pendingItem}
+              onChange={(e) => setPendingItem(e.target.value)}
+              sx={{ mb: 2 }}
+            />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <IconButton onClick={handleCancelConfirmation} color="error">
+                <DeleteIcon />
               </IconButton>
-              <IconButton sx={flipButtonStyle} onClick={switchCamera}>
-                <FlipCameraIcon fontSize="large" />
+              <IconButton 
+                onClick={handleConfirmItem} 
+                color="primary"
+                disabled={!pendingItem.trim()}
+              >
+                <CheckIcon />
               </IconButton>
             </Box>
-          ) : (
-            <Box sx={{ textAlign: 'center' }}>
-              <img src={image} alt="Captured" style={imagePreviewStyle} />
-              <Box sx={{ mt: 2 }}>
-                <Button onClick={retakePhoto} color="secondary" variant="outlined">
-                  Retake
-                </Button>
-                <Button onClick={confirmPhoto} color="primary" variant="contained" sx={{ ml: 2 }}>
-                  Confirm
-                </Button>
-              </Box>
-            </Box>
-          )}
-        </Box>
-      </Modal>
+          </Box>
+        </Modal>
       </Box>
     </ThemeProvider>
   );
