@@ -7,6 +7,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import KitchenIcon from '@mui/icons-material/Kitchen';
+import CloseIcon from '@mui/icons-material/Close';
 // import CameraIcon from '@mui/icons-material/Camera';
 import { 
   CameraAlt as CameraIcon, 
@@ -14,6 +15,8 @@ import {
   Check as CheckIcon,
   Replay as ReplayIcon
 } from '@mui/icons-material';
+import { SpeedDial, SpeedDialIcon, SpeedDialAction } from '@mui/material';
+import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import {firestore} from "@/firebase";
 import { collection, query, doc, getDocs, setDoc, deleteDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import React, { useEffect, useState, useRef } from "react";
@@ -171,6 +174,13 @@ const CameraModal = ({ open, onClose, onCapture }) => {
     setFacingMode(prevMode => prevMode === 'user' ? 'environment' : 'user');
   };
 
+  // Force re-render when facingMode changes
+  useEffect(() => {
+    if (cameraRef.current) {
+      cameraRef.current.switchCamera();
+    }
+  }, [facingMode]);
+
   return (
     <Modal open={open} onClose={onClose}>
       <Box sx={cameraModalStyle}>
@@ -184,6 +194,18 @@ const CameraModal = ({ open, onClose, onCapture }) => {
             />
             <IconButton sx={shutterButtonStyle} onClick={takePhoto}>
               <CameraIcon fontSize="large" />
+            </IconButton>
+            <IconButton
+              aria-label="close"
+              onClick={onClose}
+              sx={{
+                position: 'absolute',
+                left: 8,
+                top: 8,
+                color: 'white',
+              }}
+            >
+              <CloseIcon />
             </IconButton>
             <IconButton sx={flipButtonStyle} onClick={switchCamera}>
               <FlipCameraIcon fontSize="large" />
@@ -329,6 +351,14 @@ export default function Home() {
       case 'count':
         filtered = [...pantry].sort((a, b) => b.count - a.count);
         break;
+      case 'date':
+        filtered = [...pantry].sort((a, b) => {
+          // Convert Firestore Timestamp to JavaScript Date
+          const dateA = a.addedAt ? new Date(a.addedAt.seconds * 1000) : new Date(0);
+          const dateB = b.addedAt ? new Date(b.addedAt.seconds * 1000) : new Date(0);
+          return dateB - dateA; // Sort in descending order (newest first)
+        });
+        break;
       default:
         filtered = pantry;
     }
@@ -368,14 +398,8 @@ export default function Home() {
           <Toolbar>
             <KitchenIcon sx={{ mr: 2 }} />
             <Typography variant="h5" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-              Cozy Pantry Tracker
+              Pantry Tracker
             </Typography>
-            <Button color="inherit" onClick={() => setCameraOpen(true)} startIcon={<CameraIcon />}>
-              Capture Item
-            </Button>
-            <Button color="inherit" onClick={() => setOpen(true)} startIcon={<AddIcon />}>
-              Stock Item
-            </Button>
           </Toolbar>
         </AppBar>
         
@@ -564,6 +588,25 @@ export default function Home() {
             </Box>
           </Box>
         </Modal>
+
+        <SpeedDial
+          ariaLabel="SpeedDial basic example"
+          sx={{ position: 'fixed', bottom: 16, right: 16 }}
+          icon={<SpeedDialIcon />}
+        >
+          <SpeedDialAction
+            key="Capture"
+            icon={<CameraAltIcon />}
+            tooltipTitle="Capture Item"
+            onClick={() => setCameraOpen(true)}
+          />
+          <SpeedDialAction
+            key="Stock"
+            icon={<AddIcon />}
+            tooltipTitle="Stock Item"
+            onClick={() => setOpen(true)}
+          />
+        </SpeedDial>
       </Box>
     </ThemeProvider>
   );
