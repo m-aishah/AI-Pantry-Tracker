@@ -7,11 +7,15 @@ import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import KitchenIcon from '@mui/icons-material/Kitchen';
+import CameraIcon from '@mui/icons-material/Camera';
+import { CameraAlt as CameraAltIcon, FlipCameraAndroid as FlipCameraIcon } from '@mui/icons-material';
 import {firestore} from "@/firebase";
 import { collection, query, doc, getDocs, setDoc, deleteDoc, getDoc, serverTimestamp } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import { Camera } from "react-camera-pro";
 
-// Create a custom theme
+
+// Custom Theme (Pantry-like)
 const theme = createTheme({
   palette: {
     primary: {
@@ -61,6 +65,46 @@ const modalStyle = {
   p: 4,
   borderRadius: 2,
 };
+
+const cameraModalStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '100vh'
+};
+
+const cameraBoxStyle = {
+  position: 'relative',
+  width: '100%',
+  maxWidth: 600,
+  height: 400,
+  backgroundColor: 'black',
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
+};
+
+const shutterButtonStyle = {
+  position: 'absolute',
+  bottom: 20,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  color: 'white',
+};
+
+const flipButtonStyle = {
+  position: 'absolute',
+  top: 20,
+  right: 20,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  color: 'white',
+};
+
+const imagePreviewStyle = {
+  width: '100%',
+  maxWidth: 600,
+};
+
 export default function Home() {
   const [pantry, setPantry] = useState([]);
   const [filteredPantry, setFilteredPantry] = useState([]);
@@ -71,6 +115,9 @@ export default function Home() {
   const [editItem, setEditItem] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [image, setImage] = useState(null);
+  const [facingMode, setFacingMode] = useState('user');
+  const cameraRef = useRef(null);
 
   const updatePantry = async () => {
     const snapshot = query(collection(firestore, 'pantry'));
@@ -173,6 +220,27 @@ export default function Home() {
     handleFilterClose();
   };
 
+  const openCamera = () => setCameraOpen(true);
+  const closeCamera = () => setCameraOpen(false);
+
+  const takePhoto = () => {
+    const imageSrc = cameraRef.current.takePhoto();
+    setImage(imageSrc);
+  };
+
+  const retakePhoto = () => setImage(null);
+
+  const confirmPhoto = () => {
+    // Handle confirmed photo (e.g., upload, save, etc.)
+    console.log('Photo confirmed:', image);
+    closeCamera();
+  };
+
+  const switchCamera = () => {
+    const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newFacingMode);
+  };
+
 
   return (
     <ThemeProvider theme={theme}>
@@ -183,6 +251,9 @@ export default function Home() {
             <Typography variant="h5" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
               Cozy Pantry Tracker
             </Typography>
+            <Button color="inherit" onClick={() => setCameraOpen(true)} startIcon={<CameraIcon />}>
+              Capture Item
+            </Button>
             <Button color="inherit" onClick={() => setOpen(true)} startIcon={<AddIcon />}>
               Stock Item
             </Button>
@@ -334,6 +405,39 @@ export default function Home() {
             </Button>
           </Box>
         </Modal>
+        
+        <Modal open={cameraOpen} onClose={closeCamera}>
+        <Box sx={cameraModalStyle}>
+          {!image ? (
+            <Box sx={cameraBoxStyle}>
+              <Camera
+                ref={cameraRef}
+                facingMode={facingMode}
+                aspectRatio="cover"
+                style={{ width: '100%', height: '100%' }}
+              />
+              <IconButton sx={shutterButtonStyle} onClick={takePhoto}>
+                <CameraAltIcon fontSize="large" />
+              </IconButton>
+              <IconButton sx={flipButtonStyle} onClick={switchCamera}>
+                <FlipCameraIcon fontSize="large" />
+              </IconButton>
+            </Box>
+          ) : (
+            <Box sx={{ textAlign: 'center' }}>
+              <img src={image} alt="Captured" style={imagePreviewStyle} />
+              <Box sx={{ mt: 2 }}>
+                <Button onClick={retakePhoto} color="secondary" variant="outlined">
+                  Retake
+                </Button>
+                <Button onClick={confirmPhoto} color="primary" variant="contained" sx={{ ml: 2 }}>
+                  Confirm
+                </Button>
+              </Box>
+            </Box>
+          )}
+        </Box>
+      </Modal>
       </Box>
     </ThemeProvider>
   );
