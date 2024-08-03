@@ -6,6 +6,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
+import KitchenIcon from '@mui/icons-material/Kitchen';
 import {firestore} from "@/firebase";
 import { collection, query, doc, getDocs, setDoc, deleteDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -14,18 +15,38 @@ import { useEffect, useState } from "react";
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#FF69B4', // Hot pink
+      main: '#8B4513', // Saddle Brown (wood-like color)
     },
     secondary: {
-      main: '#FFB6C1', // Light pink
+      main: '#F4A460', // Sandy Brown
     },
     background: {
-      default: '#FFF0F5', // Lavender blush
-      paper: '#FFFFFF',
+      default: '#FFF8DC', // Cornsilk (light, warm background)
+      paper: '#FFFAF0', // Floral White (slightly off-white for containers)
+    },
+    text: {
+      primary: '#3E2723', // Dark Brown
+      secondary: '#5D4037', // Brown
     },
   },
   typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"Roboto Slab", "Helvetica", "Arial", sans-serif',
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          boxShadow: '0 3px 5px 2px rgba(139, 69, 19, .15)',
+        },
+      },
+    },
   },
 });
 
@@ -40,7 +61,6 @@ const modalStyle = {
   p: 4,
   borderRadius: 2,
 };
-
 export default function Home() {
   const [pantry, setPantry] = useState([]);
   const [filteredPantry, setFilteredPantry] = useState([]);
@@ -50,6 +70,7 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editItem, setEditItem] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const updatePantry = async () => {
     const snapshot = query(collection(firestore, 'pantry'));
@@ -152,60 +173,68 @@ export default function Home() {
     handleFilterClose();
   };
 
+
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ flexGrow: 1, bgcolor: 'background.default', minHeight: '100vh' }}>
-        <AppBar position="static" color="primary">
+        <AppBar position="static" color="primary" elevation={0}>
           <Toolbar>
+            <KitchenIcon sx={{ mr: 2 }} />
             <Typography variant="h5" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-              Pantry Tracker
+              Cozy Pantry Tracker
             </Typography>
             <Button color="inherit" onClick={() => setOpen(true)} startIcon={<AddIcon />}>
-              Add Item
+              Stock Item
             </Button>
           </Toolbar>
         </AppBar>
         
         <Container maxWidth="md" sx={{ mt: 4 }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search items..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ mb: 2, bgcolor: 'background.paper' }}
-          />
-          <Button
-            onClick={handleFilterClick}
-            startIcon={<FilterListIcon />}
-            sx={{ mb: 2 }}
-            color="secondary"
-            variant="contained"
-          >
-            Filter
-          </Button>
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleFilterClose}
-          >
-            <MenuItem onClick={() => handleFilter('asc')}>Name (A-Z)</MenuItem>
-            <MenuItem onClick={() => handleFilter('desc')}>Name (Z-A)</MenuItem>
-            <MenuItem onClick={() => handleFilter('count')}>Quantity (High to Low)</MenuItem>
-            <MenuItem onClick={() => handleFilter('date')}>Date Added (Newest First)</MenuItem>
-          </Menu>
-          <Paper elevation={3} sx={{ bgcolor: 'background.paper' }}>
+          <Paper elevation={3} sx={{ p: 3, bgcolor: 'background.paper', borderRadius: 2 }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="Search pantry items..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ mb: 2 }}
+            />
+            <Button
+              onClick={handleFilterClick}
+              startIcon={<FilterListIcon />}
+              sx={{ mb: 2 }}
+              color="secondary"
+              variant="contained"
+            >
+              Sort Items
+            </Button>
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleFilterClose}
+            >
+              <MenuItem onClick={() => handleFilter('asc')}>Name (A-Z)</MenuItem>
+              <MenuItem onClick={() => handleFilter('desc')}>Name (Z-A)</MenuItem>
+              <MenuItem onClick={() => handleFilter('count')}>Quantity (High to Low)</MenuItem>
+              <MenuItem onClick={() => handleFilter('date')}>Date Added (Newest First)</MenuItem>
+            </Menu>
             <List>
               {filteredPantry.map(({name, count, note, addedAt}) => (
                 <ListItem
                   key={name}
+                  sx={{ 
+                    bgcolor: 'background.default', 
+                    mb: 1, 
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'rgba(244, 164, 96, 0.1)' } 
+                  }}
                   secondaryAction={
                     <Box>
                       <IconButton edge="end" aria-label="add" onClick={() => addItem(name)} color="primary">
@@ -217,30 +246,34 @@ export default function Home() {
                       <IconButton edge="end" aria-label="edit" onClick={() => setEditItem(name)} color="primary">
                         <EditIcon />
                       </IconButton>
-                      <IconButton edge="end" aria-label="delete" onClick={() => removeItem(name)} color="primary">
+                      <IconButton edge="end" aria-label="delete" onClick={() => removeItem(name)} color="error">
                         <DeleteIcon />
                       </IconButton>
                     </Box>
                   }
                 >
                   <ListItemText
-                    primary={editItem === name ? 
-                      <TextField 
-                        value={name} 
-                        onChange={(e) => editItemName(name, e.target.value)}
-                        onBlur={() => setEditItem(null)}
-                        autoFocus
-                      /> : 
-                      name.charAt(0).toUpperCase() + name.slice(1)
+                    primary={
+                      <Typography variant="h6" color="text.primary">
+                        {editItem === name ? 
+                          <TextField 
+                            value={name} 
+                            onChange={(e) => editItemName(name, e.target.value)}
+                            onBlur={() => setEditItem(null)}
+                            autoFocus
+                          /> : 
+                          name.charAt(0).toUpperCase() + name.slice(1)
+                        }
+                      </Typography>
                     }
                     secondary={
                       <>
-                        <Typography component="span" variant="body2">
+                        <Typography component="span" variant="body2" color="text.secondary">
                           Quantity: {count}
                         </Typography>
                         <br />
-                        <Typography component="span" variant="body2" color="textSecondary">
-                          Added: {addedAt ? new Date(addedAt.seconds * 1000).toLocaleString() : 'Unknown'}
+                        <Typography component="span" variant="body2" color="text.secondary">
+                          Stocked: {addedAt ? new Date(addedAt.seconds * 1000).toLocaleDateString() : 'Unknown'}
                         </Typography>
                         <TextField
                           value={note || ''}
@@ -248,6 +281,7 @@ export default function Home() {
                           placeholder="Add a note"
                           variant="standard"
                           fullWidth
+                          sx={{ mt: 1 }}
                         />
                       </>
                     }
@@ -264,9 +298,9 @@ export default function Home() {
           aria-labelledby="modal-modal-title"
           aria-describedby="modal-modal-description"
         >
-          <Box sx={modalStyle}>
-            <Typography id="modal-modal-title" variant="h6" component="h2" gutterBottom>
-              Add New Item
+          <Box sx={{...modalStyle, bgcolor: 'background.paper'}}>
+            <Typography id="modal-modal-title" variant="h6" component="h2" gutterBottom color="text.primary">
+              Stock New Item
             </Typography>
             <TextField 
               autoFocus
@@ -296,7 +330,7 @@ export default function Home() {
               fullWidth
               color="primary"
             >
-              Add Item
+              Stock Item
             </Button>
           </Box>
         </Modal>
