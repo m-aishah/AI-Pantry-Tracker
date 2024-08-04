@@ -18,10 +18,11 @@ import {
 import { SpeedDial, SpeedDialIcon, SpeedDialAction } from '@mui/material';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import {firestore} from "@/firebase";
-import { collection, query, doc, getDocs, setDoc, deleteDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, doc, getDocs, setDoc, deleteDoc, getDoc, serverTimestamp, addDoc} from "firebase/firestore";
 import React, { useEffect, useState, useRef } from "react";
 import { Camera } from "react-camera-pro";
 import OpenAI from 'openai';
+import { useRouter } from 'next/navigation';
 
 
 // Custom Theme (Pantry-like)
@@ -391,17 +392,33 @@ export default function Home() {
     setPendingItem('');
   };
 
+  const router = useRouter();
+
+  const generateRecipeFromPantry = async () => {
+    const ingredients = pantry.map(item => item.name);
+    try {
+      const response = await fetch('/api/generate-recipe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ingredients }),
+      });
+      const data = await response.json();
+      
+      await addDoc(collection(firestore, 'recipes'), {
+        content: data.recipe,
+        createdAt: serverTimestamp(),
+      });
+      
+      router.push('/recipes');
+    } catch (error) {
+      console.error('Failed to generate recipe:', error);
+    }
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ flexGrow: 1, bgcolor: 'background.default', minHeight: '100vh' }}>
-        <AppBar position="static" color="primary" elevation={0}>
-          <Toolbar>
-            <KitchenIcon sx={{ mr: 2 }} />
-            <Typography variant="h5" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-              Pantry Tracker
-            </Typography>
-          </Toolbar>
-        </AppBar>
+        
         
         <Container maxWidth="md" sx={{ mt: 4 }}>
           <Paper elevation={3} sx={{ p: 3, bgcolor: 'background.paper', borderRadius: 2 }}>
